@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - dev
       - master
   pull_request:
 
@@ -31,7 +32,38 @@ jobs:
         run: bash -n scripts/run-http-provider.sh scripts/run-mcp-provider.sh
 
       - name: Build and run non-live tests
-        run: ./gradlew --no-daemon checkKotlinGradlePluginConfigurationErrors test releaseBundleZip
+        run: ./gradlew --no-daemon checkKotlinGradlePluginConfigurationErrors test fatJar releaseBundleZip
+
+      - name: Generate snapshot checksums
+        if: github.event_name == 'push' && (github.ref_name == 'main' || github.ref_name == 'dev')
+        run: |
+          mkdir -p build/ci-artifacts
+          shasum -a 256 \
+            build/libs/neopsyke-pgvector-memory-*-all.jar \
+            build/distributions/neopsyke-pgvector-memory-*-bundle.zip \
+            > build/ci-artifacts/SHA256SUMS
+
+      - name: Upload main snapshot artifacts
+        if: github.event_name == 'push' && github.ref_name == 'main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: snapshot-main-${{ github.sha }}
+          path: |
+            build/libs/neopsyke-pgvector-memory-*-all.jar
+            build/distributions/neopsyke-pgvector-memory-*-bundle.zip
+            build/ci-artifacts/SHA256SUMS
+          retention-days: 14
+
+      - name: Upload dev snapshot artifacts
+        if: github.event_name == 'push' && github.ref_name == 'dev'
+        uses: actions/upload-artifact@v4
+        with:
+          name: snapshot-dev-${{ github.sha }}
+          path: |
+            build/libs/neopsyke-pgvector-memory-*-all.jar
+            build/distributions/neopsyke-pgvector-memory-*-bundle.zip
+            build/ci-artifacts/SHA256SUMS
+          retention-days: 7
 
       - name: Upload test reports on failure
         if: failure()
